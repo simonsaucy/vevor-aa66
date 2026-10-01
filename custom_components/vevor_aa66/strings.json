@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vevor Heater (AA66)",
+        "description": "Same MAC and PIN you used for the old Diesel Heater integration. Remove or disable that integration first: the heater only accepts one Bluetooth connection.",
+        "data": {
+          "address": "Bluetooth MAC address",
+          "pin": "PIN"
+        }
+      }
+    },
+    "error": {
+      "invalid_mac": "Use the format AA:BB:CC:DD:EE:FF"
+    },
+    "abort": {
+      "already_configured": "This heater is already set up"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cabin thermostat",
+        "description": "Pick your cabin sensor to create a thermostat that runs the heater in Level mode. Temperatures are in your Home Assistant unit.",
+        "data": {
+          "cabin_sensor": "Cabin temperature sensor",
+          "on_delta": "Start when this far below target",
+          "off_delta": "Stop when this far above target",
+          "full_power_delta": "Max level when this far below target",
+          "min_run_minutes": "Minimum run time before stopping (minutes)",
+          "max_level": "Max level the thermostat will use (1-10)"
+        }
+      }
+    }
+  }
+}
