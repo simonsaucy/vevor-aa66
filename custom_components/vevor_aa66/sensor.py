@@ -3,10 +3,11 @@ from __future__ import annotations
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT, STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory,
-    UnitOfElectricPotential, UnitOfTemperature,
+    UnitOfElectricPotential, UnitOfTemperature, UnitOfTime, UnitOfVolume, UnitOfVolumeFlowRate,
 )
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_SENSOR, ERROR_NAMES, STEP_NAMES
 from .entity import VevorEntity
@@ -21,6 +22,11 @@ async def async_setup_entry(hass, entry, add):
         Mapped(c, "running_step", "Running step", STEP_NAMES),
         Mapped(c, "error_code", "Error", ERROR_NAMES),
         RawFrame(c, "decrypted_hex", "Raw frame"),
+        Fuel(c, "fuel_remaining_l", "Fuel remaining", SensorDeviceClass.VOLUME_STORAGE, UnitOfVolume.LITERS, "mdi:gas-station"),
+        Fuel(c, "fuel_used_l", "Fuel used since refill", SensorDeviceClass.VOLUME_STORAGE, UnitOfVolume.LITERS, "mdi:fuel"),
+        Fuel(c, "fuel_rate_lph", "Fuel rate", SensorDeviceClass.VOLUME_FLOW_RATE, UnitOfVolumeFlowRate.LITERS_PER_HOUR, "mdi:speedometer"),
+        Fuel(c, "fuel_runtime_h", "Fuel runtime left", SensorDeviceClass.DURATION, UnitOfTime.HOURS, "mdi:timer-sand"),
+        LastRefueled(c, "last_refueled", "Last refueled"),
     ])
 
 
@@ -120,3 +126,39 @@ class RawFrame(VevorEntity, SensorEntity):
     def native_value(self):
         v = self.d.get(self._key)
         return v[:250] if v else None  # 48 bytes = 96 hex chars
+
+
+class Fuel(VevorEntity, SensorEntity):
+    """Estimated from heater size x level x time running. Not a measurement."""
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, c, key, name, dc, unit, icon):
+        super().__init__(c, key, name)
+        self._attr_device_class = dc
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._attr_suggested_display_precision = 2 if unit != UnitOfTime.HOURS else 1
+
+    @property
+    def native_value(self):
+        return self.d.get(self._key)
+
+    @property
+    def extra_state_attributes(self):
+        if self._key != "fuel_remaining_l":
+            return None
+        return {"tank_l": self.d.get("tank_l"), "heater_size": self.d.get("heater_size"), "estimate": True}
+
+
+class LastRefueled(VevorEntity, SensorEntity):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:calendar-check"
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def native_value(self):
+        v = self.coordinator.fuel.get("last_refueled")
+        return dt_util.parse_datetime(v) if v else None

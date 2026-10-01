@@ -13,6 +13,7 @@ PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.CLIMATE, Platform
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coord = VevorCoordinator(hass, entry)
+    await coord.async_load_fuel()
     await coord.async_config_entry_first_refresh()
     entry.runtime_data = coord
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

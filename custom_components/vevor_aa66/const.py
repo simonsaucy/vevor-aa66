@@ -45,3 +45,14 @@ DEFAULT_MAX_LEVEL = 6
 MIN_OFF_SECONDS = 300       # let cooldown finish before restarting
 LEVEL_CHANGE_SECONDS = 60   # don't spam level changes
 SENSOR_STALE_SECONDS = 900  # sensor silent this long -> drop to level 1
+
+# Fuel estimate: L/h at level 1 and level 10, interpolated linearly in between.
+# Based on Vevor's published consumption ranges; it's an estimate, not a meter.
+HEATER_SIZES = {
+    "2 kW": (0.14, 0.24),
+    "5 kW": (0.16, 0.52),
+    "8 kW": (0.19, 0.62),
+}
+DEFAULT_HEATER_SIZE = "5 kW"
+DEFAULT_TANK_L = 10.0
+MAX_FUEL_GAP_SECONDS = 600  # don't extrapolate across long BLE outages

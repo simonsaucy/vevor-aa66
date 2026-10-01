@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfVolume
+from homeassistant.components.number import NumberDeviceClass
 
 from .entity import VevorEntity
 
 
 async def async_setup_entry(hass, entry, add):
     c = entry.runtime_data
-    add([Level(c, "level", "Level"), TargetTemp(c, "target_temp", "Target temperature")])
+    add([Level(c, "level", "Level"), TargetTemp(c, "target_temp", "Target temperature"),
+         TankSize(c, "tank_size", "Tank size")])
 
 
 class Level(VevorEntity, NumberEntity):
@@ -53,3 +55,25 @@ class TargetTemp(VevorEntity, NumberEntity):
 
     async def async_set_native_value(self, value):
         await self.coordinator.set_temperature(int(value))
+
+
+class TankSize(VevorEntity, NumberEntity):
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_device_class = NumberDeviceClass.VOLUME_STORAGE
+    _attr_native_unit_of_measurement = UnitOfVolume.LITERS
+    _attr_native_min_value = 1
+    _attr_native_max_value = 15
+    _attr_native_step = 0.5
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:gas-station"
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def native_value(self):
+        return self.coordinator.fuel["tank_l"]
+
+    async def async_set_native_value(self, value):
+        self.coordinator.set_tank(value)

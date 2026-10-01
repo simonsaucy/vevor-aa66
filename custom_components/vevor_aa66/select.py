@@ -4,7 +4,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import ATTR_DEVICE_CLASS, ATTR_FRIENDLY_NAME, EntityCategory
 from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_SENSOR, MODES
+from .const import CONF_SENSOR, HEATER_SIZES, MODES
 from .entity import VevorEntity
 
 NONE_OPTION = "None (heater's own sensor)"
@@ -13,7 +13,8 @@ NONE_OPTION = "None (heater's own sensor)"
 async def async_setup_entry(hass, entry, add):
     c = entry.runtime_data
     add([RunningMode(c, "running_mode", "Running mode"),
-         CabinSensorPicker(c, "cabin_sensor_picker", "Cabin sensor", entry)])
+         CabinSensorPicker(c, "cabin_sensor_picker", "Cabin sensor", entry),
+         HeaterSize(c, "heater_size", "Heater size")])
 
 
 class RunningMode(VevorEntity, SelectEntity):
@@ -76,3 +77,21 @@ class CabinSensorPicker(VevorEntity, SelectEntity):
             opts[CONF_SENSOR] = self._sensors()[option]
         # Triggers the integration's update listener -> reload with the new sensor
         self.hass.config_entries.async_update_entry(self._entry, options=opts)
+
+
+class HeaterSize(VevorEntity, SelectEntity):
+    """Used only for the fuel estimate."""
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_options = list(HEATER_SIZES)
+    _attr_icon = "mdi:radiator"
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def current_option(self):
+        return self.coordinator.fuel["heater_size"]
+
+    async def async_select_option(self, option):
+        self.coordinator.set_heater_size(option)

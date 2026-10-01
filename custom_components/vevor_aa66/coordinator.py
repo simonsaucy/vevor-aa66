@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 
 from bleak.exc import BleakError
@@ -12,11 +13,14 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CHAR_UUID, CMD_AUTO_START_STOP, CMD_LEVEL_OR_TEMP, CMD_MODE, CMD_POWER,
     CMD_STATUS, CMD_TIME_SYNC, CONF_PIN, DEFAULT_PIN, DOMAIN, ERROR_NAMES, MODE_LEVEL, MODE_TEMPERATURE,
+    DEFAULT_HEATER_SIZE, DEFAULT_TANK_L, HEATER_SIZES, MAX_FUEL_GAP_SECONDS,
     EVENT_SHUTDOWN, POLL_SECONDS, RESPONSE_TIMEOUT, STALE_CYCLES, STEP_NAMES,
 )
 from .protocol import build_command, parse
@@ -38,6 +42,78 @@ class VevorCoordinator(DataUpdateCoordinator[dict]):
         self._fails = 0
         self._last_off_sent: datetime | None = None
         self._prev_running: int | None = None
+        # Fuel estimate (persisted)
+        self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.fuel")
+        self.fuel = {"tank_l": DEFAULT_TANK_L, "heater_size": DEFAULT_HEATER_SIZE,
+                     "used_l": 0.0, "last_refueled": None}
+        self._fuel_t: float | None = None
+        self._fuel_prev: dict | None = None
+        self._last_save = 0.0
+
+    async def async_load_fuel(self) -> None:
+        if saved := await self._store.async_load():
+            self.fuel.update(saved)
+
+    def _save_fuel(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if force or now - self._last_save > 300:
+            self._last_save = now
+            self._store.async_delay_save(lambda: dict(self.fuel), 1)
+
+    def fuel_rate(self, level: int | None, step: int | None) -> float:
+        if step != 3 or level is None:  # only count while actually Running
+            return 0.0
+        lo, hi = HEATER_SIZES.get(self.fuel["heater_size"], HEATER_SIZES[DEFAULT_HEATER_SIZE])
+        return lo + (hi - lo) * (max(1, min(10, level)) - 1) / 9
+
+    def _update_fuel(self, p: dict) -> None:
+        now = time.monotonic()
+        if self._fuel_t is not None and self._fuel_prev is not None:
+            dt = min(now - self._fuel_t, MAX_FUEL_GAP_SECONDS)
+            # charge the interval at the rate that was in effect during it
+            rate = self.fuel_rate(self._fuel_prev.get("set_level"), self._fuel_prev.get("running_step"))
+            self.fuel["used_l"] += rate * dt / 3600
+            self._save_fuel()
+        self._fuel_t = now
+        self._fuel_prev = {"set_level": p.get("set_level"), "running_step": p.get("running_step")}
+        self._fuel_fields(p)
+
+    def _fuel_fields(self, p: dict) -> None:
+        f = self.fuel
+        rate = self.fuel_rate(p.get("set_level"), p.get("running_step"))
+        remaining = max(0.0, f["tank_l"] - f["used_l"])
+        p.update({
+            "fuel_rate_lph": round(rate, 3),
+            "fuel_used_l": round(f["used_l"], 2),
+            "fuel_remaining_l": round(remaining, 2),
+            "fuel_runtime_h": round(remaining / rate, 1) if rate else None,
+            "tank_l": f["tank_l"],
+            "heater_size": f["heater_size"],
+            "last_refueled": f["last_refueled"],
+        })
+
+    def _push_fuel(self) -> None:
+        if self.data:
+            p = dict(self.data)
+            self._fuel_fields(p)
+            self.async_set_updated_data(p)
+
+    def reset_fuel(self) -> None:
+        self.fuel["used_l"] = 0.0
+        self.fuel["last_refueled"] = dt_util.now().isoformat()
+        self._save_fuel(force=True)
+        _LOGGER.info("Fuel counter reset (refilled)")
+        self._push_fuel()
+
+    def set_tank(self, liters: float) -> None:
+        self.fuel["tank_l"] = float(liters)
+        self._save_fuel(force=True)
+        self._push_fuel()
+
+    def set_heater_size(self, size: str) -> None:
+        self.fuel["heater_size"] = size
+        self._save_fuel(force=True)
+        self._push_fuel()
 
     # ---------- BLE plumbing ----------
     async def _connect(self) -> None:
@@ -93,6 +169,7 @@ class VevorCoordinator(DataUpdateCoordinator[dict]):
         p["set_temp"] = p["set_temp_raw"]
         p["unit"] = "F" if unit_f else "C"
         p["connected"] = True
+        self._update_fuel(p)
         self._log_shutdown(p)
         return p
 
@@ -170,6 +247,7 @@ class VevorCoordinator(DataUpdateCoordinator[dict]):
         await self._command(CMD_TIME_SYNC, now.hour * 60 + now.minute)
 
     async def shutdown(self) -> None:
+        self._save_fuel(force=True)
         if self._client:
             try:
                 await self._client.disconnect()
