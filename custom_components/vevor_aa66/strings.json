@@ -29,7 +29,7 @@
     "step": {
       "init": {
         "title": "Cabin thermostat",
-        "description": "Pick your cabin sensor to create a thermostat that runs the heater in Level mode. Temperatures are in your Home Assistant unit.",
+        "description": "Pick the temperature sensor inside your cabin. It becomes the Cabin temperature reading and drives the Cabin thermostat (which runs the heater in Level mode). Temperatures are in your Home Assistant unit.",
         "data": {
           "cabin_sensor": "Cabin temperature sensor",
           "on_delta": "Start when this far below target",
