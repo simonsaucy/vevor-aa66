@@ -3,9 +3,16 @@
     "step": {
       "user": {
         "title": "Vevor Heater (AA66)",
-        "description": "Same MAC and PIN you used for the old Diesel Heater integration. Remove or disable that integration first: the heater only accepts one Bluetooth connection.",
+        "description": "Pick your heater from the list (heaters currently in range), or type its MAC. If it isn't listed, disable the old Diesel Heater integration and close the Vevor app: the heater stops advertising while something is connected.",
         "data": {
           "address": "Bluetooth MAC address",
+          "pin": "PIN"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Vevor heater found",
+        "description": "Set up {name} ({address})?",
+        "data": {
           "pin": "PIN"
         }
       }
@@ -15,7 +22,8 @@
     },
     "abort": {
       "already_configured": "This heater is already set up"
-    }
+    },
+    "flow_title": "{name}"
   },
   "options": {
     "step": {
